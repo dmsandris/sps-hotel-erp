@@ -1613,3 +1613,18 @@ begin
     (v_prop, 'PAY-CL',       'City Ledger (Tagih ke Perusahaan)', 'PAYMENT', false)
   on conflict (property_id, code) do nothing;
 end $$;
+
+-- Backfill profil untuk akun yang sudah daftar sebelum migration dijalankan.
+-- Akun terlama menjadi admin bila belum ada admin; sisanya viewer.
+do $$
+declare v_prop uuid; u record;
+begin
+  select id into v_prop from public.properties order by created_at limit 1;
+  for u in select id, email, raw_user_meta_data from auth.users
+            where id not in (select user_id from public.profiles) order by created_at loop
+    insert into public.profiles (user_id, property_id, email, full_name, role)
+    values (u.id, v_prop, u.email,
+            coalesce(u.raw_user_meta_data->>'full_name', split_part(u.email, '@', 1)),
+            case when exists (select 1 from public.profiles where role = 'admin') then 'viewer' else 'admin' end);
+  end loop;
+end $$;

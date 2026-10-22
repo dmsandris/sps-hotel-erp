@@ -1,0 +1,31 @@
+name: Jalankan migration Supabase
+
+# Manual: Actions > "Jalankan migration Supabase" > Run workflow.
+# Butuh secret SUPABASE_DB_URL (Supabase > Project Settings > Database > Connection string > URI,
+# pakai "Session pooler" port 5432). Semua file migration aman dijalankan ulang (idempotent).
+on:
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: 'Ikut jalankan data demo (seed)?'
+        type: boolean
+        default: true
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install psql
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: Apply migrations
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SEED: ${{ inputs.seed }}
+        run: |
+          test -n "$DB_URL" || { echo "::error::Secret SUPABASE_DB_URL belum diset"; exit 1; }
+          for f in supabase/migrations/*.sql; do
+            case "$f" in *seed*) [ "$SEED" = "true" ] || { echo "skip $f"; continue; } ;; esac
+            echo "== $f"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$f"
+          done

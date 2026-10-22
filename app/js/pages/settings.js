@@ -27,6 +27,8 @@ export async function render(el) {
       if (tab === 'hotel') body = `<div class="card" style="max-width:640px"><div class="bd" id="hf">
         <label class="f">Nama hotel<input name="name" value="${esc(p.name)}"></label>
         <label class="f">Alamat<input name="address" value="${esc(p.address || '')}"></label>
+        <div class="row"><label class="f">Telepon<input name="phone" value="${esc(p.phone || '')}"></label><label class="f">Email<input name="email" value="${esc(p.email || '')}"></label><label class="f">NPWP<input name="npwp" value="${esc(p.npwp || '')}"></label></div>
+        <label class="f">Harga breakfast tambahan / pax<input type="number" name="breakfast_price" value="${p.breakfast_price ?? 125000}" min="0" step="5000"></label>
         <div class="row"><label class="f">Service charge (%)<input type="number" step="0.5" name="service" value="${p.service_rate * 100}"></label>
           <label class="f">Pajak PBJT (%)<input type="number" step="0.5" name="tax" value="${p.tax_rate * 100}"></label></div>
         <div class="row"><label class="f">Hold booking (menit)<input type="number" min="5" max="60" name="hold_minutes" value="${p.hold_minutes}"></label>
@@ -62,7 +64,8 @@ export async function render(el) {
       if (hs) hs.onclick = async () => {
         const f = form(el.querySelector('#hf'));
         try {
-          await q(sb.from('properties').update({ name: f.name, address: f.address, service_rate: Number(f.service) / 100, tax_rate: Number(f.tax) / 100,
+          const extra = p.breakfast_price !== undefined ? { phone: f.phone || null, email: f.email || null, npwp: f.npwp || null, breakfast_price: Number(f.breakfast_price || 0) } : {};
+          await q(sb.from('properties').update({ ...extra, name: f.name, address: f.address, service_rate: Number(f.service) / 100, tax_rate: Number(f.tax) / 100,
             hold_minutes: Number(f.hold_minutes), calendar_cap: Number(f.calendar_cap), checkin_time: f.checkin_time, checkout_time: f.checkout_time }).eq('id', p.id));
           await refreshProperty(); toast('Pengaturan hotel disimpan.', 'ok');
         } catch (e) { fail(e); }

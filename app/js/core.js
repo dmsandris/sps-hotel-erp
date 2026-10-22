@@ -56,17 +56,42 @@ const ERR = {
   ROOM_NOT_READY: 'Kamar tujuan belum READY.',
   USE_ROOM_MOVE: 'Tamu sudah in-house, gunakan Pindah Kamar.',
   REFUND_EXCEEDS_CREDIT: 'Refund melebihi saldo kredit tamu.',
+  CL_REQUIRES_COMPANY: 'City Ledger butuh perusahaan: set perusahaan di reservasi/folio dulu.',
+  FACILITY_CONFLICT: 'Jadwal bentrok dengan booking lain di fasilitas ini.',
+  OUTSIDE_OPENING_HOURS: 'Di luar jam operasional fasilitas.',
+  MEETING_ROOM_REQUIRED: 'Pilih ruang meeting.',
+  EVENT_CLOSED: 'Event sudah selesai/dibatalkan.',
+  ITEM_ALREADY_POSTED: 'Item sudah diposting ke folio.',
+  SHIFT_ALREADY_OPEN: 'Anda sudah punya shift kasir yang terbuka.',
+  NO_OPEN_SHIFT: 'Tidak ada shift kasir yang terbuka.',
+  AR_CLOSED: 'Invoice sudah lunas / void.',
+  AR_ALREADY_PAID: 'Invoice City Ledger sudah dibayar sebagian — tidak bisa di-void.',
+  USE_CHECKOUT: 'Folio tamu ditutup lewat check-out.',
+  SAME_FOLIO: 'Folio tujuan sama dengan asal.',
+  CANNOT_ROUTE_TO_SELF: 'Tidak bisa routing ke folio sendiri.',
+  INVALID_ROOM_COUNT: 'Jumlah kamar grup 1–100.',
+  NAME_REQUIRED: 'Nama wajib diisi.',
+  INVALID_AMOUNT: 'Jumlah tidak valid.',
+  INVALID_TIME: 'Jam selesai harus setelah jam mulai.',
+  INVALID_PAX: 'Jumlah orang tidak valid.',
   FORBIDDEN: 'Anda tidak punya hak untuk aksi ini.'
 };
 export function errText(e) {
   const m = (e && (e.message || e.error_description || e.details)) || String(e);
-  for (const k of Object.keys(ERR)) if (m.includes(k)) return ERR[k];
   let x;
+  if ((x = m.match(/FACILITY_FULL_(-?\d+)/))) return 'Kapasitas penuh — sisa ' + Math.max(0, +x[1]) + ' orang di jam itu.';
+  if ((x = m.match(/OVER_CAPACITY_(\d+)/))) return 'Melebihi kapasitas (' + x[1] + ' orang).';
+  if ((x = m.match(/BREAKFAST_NOT_ENTITLED_(\d+)/))) return x[1] + ' pax tidak termasuk paket breakfast.';
+  if ((x = m.match(/TXN_CODE_NOT_FOUND_(\S+)/))) return 'Kode transaksi ' + x[1] + ' tidak ditemukan.';
+  if ((x = m.match(/PAYMENT_METHOD_NOT_FOUND_(\S+)/))) return 'Metode bayar ' + x[1] + ' tidak dikenal.';
   if ((x = m.match(/FOLIO_UNSETTLED_([\d.]+)/))) return 'Folio belum lunas: ' + rp(x[1]);
   if ((x = m.match(/FOLIO_CREDIT_([\d.]+)/))) return 'Tamu punya saldo kredit ' + rp(x[1]) + ' — lakukan refund dulu.';
   if ((x = m.match(/ROOM_NOT_READY_(\w+)/))) return 'Kamar belum siap (status ' + x[1] + '). Minta prioritas inspeksi atau override supervisor.';
   if ((x = m.match(/MIN_LOS_(\d+)/))) return 'Minimal menginap ' + x[1] + ' malam untuk tanggal ini.';
   if ((x = m.match(/INVALID_STATUS_(\w+)/))) return 'Status saat ini (' + x[1] + ') tidak mengizinkan aksi ini.';
+  for (const k of Object.keys(ERR)) if (m.includes(k)) return ERR[k];
+  if (/Failed to fetch|NetworkError/i.test(m)) return 'Koneksi terputus. Cek internet lalu coba lagi.';
+  if (/function .* does not exist|Could not find the function/i.test(m)) return 'Fitur ini butuh upgrade database (jalankan file SQL upgrade terbaru di Supabase).';
   return m;
 }
 
@@ -91,10 +116,10 @@ export function toast(msg, kind = '') {
 }
 export const fail = (e) => { console.error(e); toast(errText(e), 'err'); };
 
-export function modal({ title, body, actions = [], wide = false, onMount }) {
+export function modal({ title, body, actions = [], wide = false, xwide = false, onMount }) {
   const bg = document.createElement('div');
   bg.className = 'modal-bg';
-  bg.innerHTML = `<div class="modal ${wide ? 'wide' : ''}" role="dialog" aria-modal="true">
+  bg.innerHTML = `<div class="modal ${xwide ? 'xwide' : wide ? 'wide' : ''}" role="dialog" aria-modal="true">
     <div class="hd"><h3>${esc(title)}</h3><button class="btn ghost sm x" data-x>Tutup</button></div>
     <div class="bd">${body}</div>
     ${actions.length ? `<div class="ft">${actions.map((a, i) => `<button class="btn ${a.cls || ''}" data-a="${i}">${esc(a.label)}</button>`).join('')}</div>` : ''}

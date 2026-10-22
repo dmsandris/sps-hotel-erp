@@ -19,6 +19,7 @@ export async function render(el) {
   let lines = [];
   let batch = uid();   // tetap sama saat retry -> tidak double-post
   let code = codes.find((c) => c.code === 'FB-FOOD')?.code || codes[0]?.code;
+  let room = '', mode = 'room', method = 'CASH', buyer = '';
 
   async function load() {
     try {
@@ -35,16 +36,21 @@ export async function render(el) {
           <div class="row mt"><label class="f">Item lain<input id="cn" placeholder="Uraian"></label><label class="f" style="max-width:130px">Harga<input id="cp" type="number" min="0" step="500"></label>
             <button class="btn" id="add" style="margin-top:8px">Tambah</button></div>
         </div></div>
-        <div class="card"><div class="hd"><h3>Charge ke kamar</h3></div><div class="bd">
-          <label class="f">Kamar / tamu in-house<select id="rm"><option value="">— pilih kamar —</option>${inh.map((r) => `<option value="${esc(r.rooms?.number)}">${esc(r.rooms?.number)} · ${esc(r.guests?.full_name)}</option>`).join('')}</select></label>
+        <div class="card"><div class="hd"><h3>Transaksi</h3><span class="sp"><div class="seg"><button data-mode="room" class="${mode === 'room' ? 'on' : ''}">Charge ke kamar</button><button data-mode="cash" class="${mode === 'cash' ? 'on' : ''}">Bayar langsung</button></div></span></div><div class="bd">
+          ${mode === 'room' ? `<label class="f">Kamar / tamu in-house<select id="rm"><option value="">— pilih kamar —</option>${inh.map((r) => `<option value="${esc(r.rooms?.number)}" ${r.rooms?.number === room ? 'selected' : ''}>${esc(r.rooms?.number)} · ${esc(r.guests?.full_name)}</option>`).join('')}</select></label>`
+          : `<div class="row"><label class="f">Nama pembeli (opsional)<input id="by" value="${esc(buyer)}"></label><label class="f">Metode<select id="mt">${[['CASH', 'Tunai'], ['CARD', 'Kartu'], ['QRIS', 'QRIS'], ['TRANSFER', 'Transfer']].map(([k, l]) => `<option value="${k}" ${k === method ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>`}
           <table class="t"><tbody>${lines.map((l, i) => `<tr><td>${esc(l.n)}</td><td><input type="number" min="1" value="${l.q}" data-q="${i}" style="width:60px"></td>
             <td class="right num">${rp(l.q * l.p)}</td><td><button class="btn sm ghost" data-x="${i}">✕</button></td></tr>`).join('') || '<tr><td class="empty">Belum ada item.</td></tr>'}</tbody></table>
           <div class="sum-row mt"><span>Subtotal</span><span>${rp(net)}</span></div>
           <div class="sum-row tot"><span>Total ${cur?.is_taxable ? '(+service & pajak)' : ''}</span><span>${rp(gross)}</span></div>
-          <p class="muted" style="font-size:12px">Verifikasi nama tamu & tanda tangan struk sebelum posting (anti salah kamar).</p>
-          <button class="btn pri lg" id="post" ${lines.length ? '' : 'disabled'}>Posting ke folio</button>
+          <p class="muted small">${mode === 'room' ? 'Verifikasi nama tamu & tanda tangan struk sebelum posting (anti salah kamar).' : 'Penjualan non-tamu dicatat ke folio House harian + pembayaran langsung (masuk shift kasir & GL).'}</p>
+          <button class="btn pri lg" id="post" ${lines.length ? '' : 'disabled'}>${mode === 'room' ? 'Posting ke folio kamar' : 'Terima pembayaran'}</button>
         </div></div></div>`;
 
+      el.querySelectorAll('[data-mode]').forEach((b) => b.onclick = () => { mode = b.dataset.mode; load(); });
+      const rmS = el.querySelector('#rm'); if (rmS) rmS.onchange = () => { room = rmS.value; };
+      const mtS = el.querySelector('#mt'); if (mtS) mtS.onchange = () => { method = mtS.value; };
+      const byS = el.querySelector('#by'); if (byS) byS.oninput = () => { buyer = byS.value; };
       el.querySelectorAll('[data-c]').forEach((b) => b.onclick = () => { if (lines.length && b.dataset.c !== code) { lines = []; batch = uid(); } code = b.dataset.c; load(); });
       el.querySelectorAll('[data-p]').forEach((b) => b.onclick = () => {
         const [n, p] = PRESETS[code][+b.dataset.p];
@@ -59,14 +65,14 @@ export async function render(el) {
       el.querySelectorAll('[data-q]').forEach((i) => i.onchange = () => { lines[+i.dataset.q].q = Math.max(1, Number(i.value)); load(); });
       el.querySelectorAll('[data-x]').forEach((b) => b.onclick = () => { lines.splice(+b.dataset.x, 1); load(); });
       el.querySelector('#post').onclick = async (e) => {
-        const room = el.querySelector('#rm').value;
-        if (!room) return toast('Pilih kamar.', 'err');
+        if (mode === 'room' && !room) return toast('Pilih kamar.', 'err');
         e.target.disabled = true;
         try {
           for (const [i, l] of lines.entries()) {
-            await rpc('post_charge_to_room', { p_room_number: room, p_txn_code: code, p_description: l.n, p_quantity: l.q, p_unit_price: l.p, p_idempotency_key: `OUT:${batch}:${i}` });
+            if (mode === 'room') await rpc('post_charge_to_room', { p_room_number: room, p_txn_code: code, p_description: l.n, p_quantity: l.q, p_unit_price: l.p, p_idempotency_key: `OUT:${batch}:${i}` });
+            else await rpc('outlet_cash_sale', { p_txn_code: code, p_description: l.n + (buyer ? ' - ' + buyer : ''), p_quantity: l.q, p_unit_price: l.p, p_method: method, p_reference: buyer || null, p_idempotency_key: `CASH:${batch}:${i}` });
           }
-          toast(`${lines.length} item diposting ke kamar ${room}.`, 'ok'); lines = []; batch = uid(); load();
+          toast(mode === 'room' ? `${lines.length} item diposting ke kamar ${room}.` : `Penjualan ${rp(gross)} diterima (${method}).`, 'ok'); lines = []; batch = uid(); buyer = ''; load();
         } catch (err) { fail(err); e.target.disabled = false; }
       };
     } catch (e) { fail(e); }

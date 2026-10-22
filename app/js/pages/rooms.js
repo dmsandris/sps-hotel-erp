@@ -90,5 +90,7 @@ export async function render(el) {
     } catch (e) { fail(e); }
   }
   await load();
+  const rid = new URLSearchParams(location.hash.split('?')[1] || '').get('room');
+  if (rid) { const r = (await q(sb.from('rooms').select('*, room_types(code, name)').eq('id', rid))).at(0); if (r) roomModal(r, load); }
   return onData(load);
 }

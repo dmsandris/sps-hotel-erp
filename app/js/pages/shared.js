@@ -15,7 +15,7 @@ export async function openReservation(id, onDone = () => {}) {
   let r, nights, folio;
   try {
     [r, nights, folio] = await Promise.all([
-      q(sb.from('reservations').select(RES_SELECT).eq('id', id).single()),
+      q(sb.from('reservations').select(RES_SELECT + ', companies(name), reservation_groups(name)').eq('id', id).single()).catch(() => q(sb.from('reservations').select(RES_SELECT).eq('id', id).single())),
       q(sb.from('reservation_night_rates').select('*').eq('reservation_id', id).is('superseded_at', null).order('stay_date')),
       q(sb.from('folios').select('*').eq('reservation_id', id).maybeSingle())
     ]);
@@ -47,6 +47,8 @@ export async function openReservation(id, onDone = () => {}) {
         <div class="sum-row"><span class="muted">Tipe / Rate</span><span>${esc(r.room_types?.name)} · ${esc(r.rate_plans?.code)}</span></div>
         <div class="sum-row"><span class="muted">Kamar</span><span>${r.rooms ? esc(r.rooms.number) + ' ' + roomTag(r.rooms) : '-'}</span></div>
         <div class="sum-row"><span class="muted">Channel / Pax</span><span>${esc(r.channel)} · ${r.adults} dewasa</span></div>
+        ${r.companies ? `<div class="sum-row"><span class="muted">Perusahaan</span><span>${esc(r.companies.name)}</span></div>` : ''}
+        ${r.reservation_groups ? `<div class="sum-row"><span class="muted">Grup</span><span class="tag MASTER">⧉ ${esc(r.reservation_groups.name)}</span></div>` : ''}
         ${r.expires_at ? `<div class="sum-row"><span class="muted">Hold berakhir</span><b>${fmtTime(r.expires_at)}</b></div>` : ''}
         ${r.special_requests ? `<div class="sum-row"><span class="muted">Permintaan</span><span>${esc(r.special_requests)}</span></div>` : ''}
         ${folio ? `<div class="sum-row tot"><span>Saldo folio ${esc(folio.folio_no)}</span><span>${rp(folio.balance)}</span></div>` : ''}
